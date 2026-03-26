@@ -1,18 +1,24 @@
 import React, { useState, useRef, useEffect } from "react";
 import demoLeaf from "../assets/demo-leaf.jpeg";
 
-const API_URL ="http://192.168.0.105:8000/predict";
+const API_URL = "http://localhost:8000/predict";
+const SIM_API = "http://localhost:8000/simulate";
 
 export default function DiseaseDetect() {
+
   const [file, setFile] = useState(null);
   const [origPreview, setOrigPreview] = useState(null);
   const [resp, setResp] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [showGradcam, setShowGradcam] = useState(false);
+  const [dragActive, setDragActive] = useState(false);
+  const [days, setDays] = useState(7);
+  const [usage, setUsage] = useState(0);
+  const [simulation, setSimulation] = useState(null);
 
   const fileInputRef = useRef();
 
-  // Cleanup object URL
   useEffect(() => {
     return () => {
       if (origPreview) URL.revokeObjectURL(origPreview);
@@ -25,10 +31,31 @@ export default function DiseaseDetect() {
     setOrigPreview(URL.createObjectURL(f));
     setResp(null);
     setError(null);
+    setShowGradcam(false);
+  }
+
+  function handleDragOver(e) {
+    e.preventDefault();
+    setDragActive(true);
+  }
+
+  function handleDragLeave(e) {
+    e.preventDefault();
+    setDragActive(false);
+  }
+
+  function handleDrop(e) {
+    e.preventDefault();
+    setDragActive(false);
+    const droppedFile = e.dataTransfer.files?.[0];
+    handleFile(droppedFile);
   }
 
   async function analyze() {
-    if (!file) return setError("Upload image first.");
+    if (!file) {
+      setError("Upload image first.");
+      return;
+    }
 
     setLoading(true);
     setError(null);
@@ -37,23 +64,36 @@ export default function DiseaseDetect() {
     fd.append("file", file);
 
     try {
-      const r = await fetch(API_URL, {
-        method: "POST",
-        body: fd,
-      });
-
-      if (!r.ok) {
-        const text = await r.text();
-        throw new Error(text);
-      }
-
+      const r = await fetch(API_URL, { method: "POST", body: fd });
+      if (!r.ok) throw new Error();
       const data = await r.json();
       setResp(data);
-    } catch (err) {
-      setError("Backend error. Check server.");
-      setResp(null);
+      setSimulation(data.simulation);
+    } catch {
+      setError("Cannot connect to backend.");
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function runSimulation(newDays, newUsage) {
+    if (!resp?.best?.label) return;
+
+    try {
+      const r = await fetch(SIM_API, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          disease: resp.best.label,
+          days: newDays,
+          usage: newUsage,
+        }),
+      });
+
+      const data = await r.json();
+      setSimulation(data);
+    } catch {
+      console.log("Simulation error");
     }
   }
 
@@ -61,25 +101,53 @@ export default function DiseaseDetect() {
   const isHealthy =
     resp?.best?.label?.toLowerCase().includes("healthy") ?? false;
 
+  const getBorderColor = () => {
+    if (isHealthy) return "border-green-500";
+    if (resp.best.severity === "High") return "border-red-500";
+    if (resp.best.severity === "Moderate") return "border-yellow-500";
+    return "border-gray-300";
+  };
+
+  const getIcon = () => {
+    if (isHealthy)
+      return <div className="text-green-600 text-5xl">✔</div>;
+    if (resp.best.severity === "High")
+      return <div className="text-red-600 text-5xl">✖</div>;
+    return <div className="text-yellow-600 text-5xl">⚠</div>;
+  };
+
+  const getBadgeColor = () => {
+    if (isHealthy) return "bg-green-100 text-green-700";
+    if (resp.best.severity === "High")
+      return "bg-red-100 text-red-700";
+    if (resp.best.severity === "Moderate")
+      return "bg-yellow-100 text-yellow-700";
+    return "bg-gray-100 text-gray-700";
+  };
+
   return (
-    <div className="max-w-6xl mx-auto p-8">
+    <div className="max-w-7xl mx-auto p-8">
+
       <h2 className="text-2xl font-bold text-center mb-8">
         Pest & Disease Detector
       </h2>
 
-      {/* UPLOAD SECTION */}
+      {/* UPLOAD */}
       {!resp && (
         <div className="text-center space-y-6">
           <div
-            className="border-2 border-dashed p-10 rounded-xl cursor-pointer hover:bg-gray-50 transition"
+            className={`border-2 border-dashed p-10 rounded-xl cursor-pointer transition
+            ${dragActive ? "bg-green-50 border-green-500" : "hover:bg-gray-50"}`}
             onClick={() => fileInputRef.current.click()}
+            onDragOver={handleDragOver}
+            onDragLeave={handleDragLeave}
+            onDrop={handleDrop}
           >
             Drag & Drop or Click to Upload
             <input
               ref={fileInputRef}
               type="file"
               accept="image/*"
-              capture="environment"
               className="hidden"
               onChange={(e) => handleFile(e.target.files?.[0])}
             />
@@ -95,8 +163,7 @@ export default function DiseaseDetect() {
 
           <button
             onClick={analyze}
-            disabled={loading}
-            className="px-6 py-2 bg-green-600 text-white rounded-lg disabled:opacity-50"
+            className="px-6 py-2 bg-green-600 text-white rounded-lg"
           >
             {loading ? "Analyzing..." : "Analyze Image"}
           </button>
@@ -105,132 +172,162 @@ export default function DiseaseDetect() {
         </div>
       )}
 
-      {/* RESULT SECTION */}
-      {resp && (
-        <div className="grid md:grid-cols-2 gap-10 items-start">
+      {/* RESULTS */}
+      {resp?.best && (
+        <div className="grid md:grid-cols-5 gap-10 items-start">
 
-          {/* LEFT SIDE */}
-          <div className="space-y-6">
-            <div>
-              <h4 className="font-semibold mb-2">Uploaded Image</h4>
-              {origPreview && (
-                <img
-                  src={origPreview}
-                  alt="leaf"
-                  className="rounded-xl shadow-md"
+          {/* LEFT (Image + Simulation) */}
+          <div className="md:col-span-2 space-y-6">
+
+            <img
+              src={`data:image/jpeg;base64,${resp.leaf_preview}`}
+              alt="leaf"
+              className="rounded-xl shadow-md"
+            />
+
+            {resp.gradcam && (
+              <div>
+                <button
+                  onClick={() => setShowGradcam(!showGradcam)}
+                  className="mb-3 px-4 py-2 text-sm bg-gray-200 rounded-lg"
+                >
+                  {showGradcam ? "Hide Grad-CAM" : "Show Grad-CAM"}
+                </button>
+
+                {showGradcam && (
+                  <img
+                    src={`data:image/jpeg;base64,${resp.gradcam}`}
+                    alt="gradcam"
+                    className="rounded-xl shadow-md"
+                  />
+                )}
+              </div>
+            )}
+
+            {/* Simulation */}
+            <div className="bg-gray-100 rounded-lg p-4 space-y-3">
+              <h4 className="font-semibold">Disease Growth Simulation</h4>
+
+              <div>
+                <label>Days: {days}</label>
+                <input
+                  type="range"
+                  min="1"
+                  max="14"
+                  value={days}
+                  onChange={(e) => {
+                    const d = parseInt(e.target.value);
+                    setDays(d);
+                    runSimulation(d, usage);
+                  }}
+                  className="w-full"
                 />
+              </div>
+
+              <div>
+                <label>Pesticide Usage: {usage * 100}%</label>
+                <input
+                  type="range"
+                  min="0"
+                  max="1"
+                  step="0.1"
+                  value={usage}
+                  onChange={(e) => {
+                    const u = parseFloat(e.target.value);
+                    setUsage(u);
+                    runSimulation(days, u);
+                  }}
+                  className="w-full"
+                />
+              </div>
+
+              {simulation && (
+                <div>
+                  <p>Infection: {simulation.infection_percent}%</p>
+                  <p>Yield Loss: {simulation.yield_loss_percent}%</p>
+                </div>
               )}
             </div>
           </div>
 
-          {/* RIGHT CARD */}
-          <div
-            className={`rounded-xl shadow-lg p-6 border-t-4 ${
-              isHealthy ? "border-green-500" : "border-red-500"
-            }`}
-          >
+          {/* RIGHT */}
+          <div className={`md:col-span-3 rounded-xl shadow-lg p-6 border-t-4 ${getBorderColor()}`}>
+
             <div className="text-center mb-6">
-              {isHealthy ? (
-                <>
-                  <div className="text-green-600 text-sm font-semibold mb-2">
-                    HEALTHY PLANT
-                  </div>
-                  <div className="text-green-600 text-5xl">✔</div>
-                </>
-              ) : (
-                <>
-                  <div className="text-red-600 text-sm font-semibold mb-2">
-                    DISEASE DETECTED
-                  </div>
-                  <div className="text-red-600 text-5xl">✖</div>
-                </>
-              )}
-            </div>
+              {getIcon()}
 
-            <div className="bg-gray-100 rounded-lg p-4 mb-4 text-center">
-              <div className="text-xs text-gray-500">PLANT TYPE</div>
-              <div className="text-lg font-semibold">
-                {resp.best.crop}
-              </div>
-            </div>
-
-            <div className="bg-gray-100 rounded-lg p-4 mb-4 text-center">
-              <div className="text-xs text-gray-500">CONDITION</div>
-              <div
-                className={`font-semibold ${
-                  isHealthy ? "text-green-600" : "text-red-600"
-                }`}
-              >
+              <div className="mt-4 text-xl font-bold">
                 {resp.best.friendly}
               </div>
+
+              <div className="text-sm text-gray-500">
+                Crop: {resp.best.crop}
+              </div>
+
+              <div className="text-sm">
+                Confidence: {pct(resp.best.confidence)}
+              </div>
+
+              <div
+                className={`mt-2 inline-block px-3 py-1 text-xs rounded-full font-semibold ${getBadgeColor()}`}
+              >
+                Severity: {resp.best.severity}
+              </div>
             </div>
 
-            <div
-              className={`rounded-lg p-4 mb-6 ${
-                isHealthy
-                  ? "bg-green-50 border-l-4 border-green-500"
-                  : "bg-red-50 border-l-4 border-red-500"
-              }`}
-            >
-              <h4 className="font-semibold mb-2">
-                Recommended Actions
-              </h4>
+            {/* Quick Stats */}
+            {simulation && (
+              <div className="grid grid-cols-2 gap-4 mb-6">
+                <div className="bg-gray-50 p-4 rounded-lg text-center">
+                  <div className="text-xs text-gray-500">INFECTION</div>
+                  <div className="text-lg font-bold text-red-600">
+                    {simulation.infection_percent}%
+                  </div>
+                </div>
 
-              <ul className="text-sm space-y-1">
-                {(resp.best.suggested_actions || []).map(
-                  (a, i) => (
-                    <li key={i}>• {a}</li>
-                  )
-                )}
-              </ul>
-            </div>
+                <div className="bg-gray-50 p-4 rounded-lg text-center">
+                  <div className="text-xs text-gray-500">YIELD LOSS</div>
+                  <div className="text-lg font-bold text-red-600">
+                    {simulation.yield_loss_percent}%
+                  </div>
+                </div>
+              </div>
+            )}
 
-            {/* TOP 3 */}
+            <Section title="Pathogen">
+              <p className="text-sm">{resp.best.pathogen}</p>
+            </Section>
+
+            <Section title="Symptoms" items={resp.best.symptoms} />
+            <Section title="Recommended Actions" items={resp.best.suggested_actions} />
+            <Section title="Prevention" items={resp.best.prevention} />
+            <Section title="Cure" items={resp.best.cure} />
+
+            {/* Top 3 */}
             <div>
-              <h4 className="font-semibold mb-2">
-                Top 3 Predictions
-              </h4>
-
-              <div className="space-y-3 text-sm">
+              <h4 className="font-semibold mb-2">Top 3 Predictions</h4>
+              <div className="space-y-2 text-sm">
                 {resp.top3.map((t, i) => (
-                  <div key={i} className="bg-gray-50 p-3 rounded-md">
-                    <div className="flex justify-between mb-1">
-                      <span>
-                        {t.label
-                          .replace(/__/g, " - ")
-                          .replace(/_/g, " ")}
-                      </span>
-                      <span>{pct(t.confidence)}</span>
-                    </div>
-
-                    <div className="w-full bg-gray-200 h-2 rounded">
-                      <div
-                        className="bg-green-500 h-2 rounded"
-                        style={{
-                          width: `${t.confidence * 100}%`,
-                        }}
-                      />
-                    </div>
+                  <div key={i} className="flex justify-between bg-gray-50 p-2 rounded-md">
+                    <span>{t.label.replace(/__/g, " - ").replace(/_/g, " ")}</span>
+                    <span>{pct(t.confidence)}</span>
                   </div>
                 ))}
               </div>
             </div>
 
             <button
-              onClick={() => {
-                setResp(null);
-                setFile(null);
-                setOrigPreview(null);
-              }}
+              onClick={() => window.location.reload()}
               className="mt-6 w-full bg-green-600 text-white py-2 rounded-lg"
             >
               Analyze Another Image
             </button>
+
           </div>
         </div>
       )}
 
-      {/* TIPS SECTION */}
+      {/* Tips */}
       <div className="mt-16 bg-gray-50 p-6 rounded-xl shadow-sm">
         <h3 className="text-lg font-semibold mb-6 text-center">
           Tips for Best Results
@@ -249,6 +346,23 @@ export default function DiseaseDetect() {
           className="mx-auto mt-6 w-56 rounded-md shadow-md"
         />
       </div>
+    </div>
+  );
+}
+
+function Section({ title, items, children }) {
+  if ((!items || items.length === 0) && !children) return null;
+  return (
+    <div className="bg-gray-100 rounded-lg p-4 mb-4">
+      <h4 className="font-semibold mb-2">{title}</h4>
+      {items && (
+        <ul className="text-sm space-y-1">
+          {items.map((item, i) => (
+            <li key={i}>• {item}</li>
+          ))}
+        </ul>
+      )}
+      {children}
     </div>
   );
 }
