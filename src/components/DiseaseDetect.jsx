@@ -1,8 +1,13 @@
 import React, { useState, useRef, useEffect } from "react";
 import demoLeaf from "../assets/demo-leaf.jpeg";
 
-const API_URL = "http://localhost:8000/predict";
-const SIM_API = "http://localhost:8000/simulate";
+// BUG FIX #13: Use env var instead of hardcoded localhost
+const API_URL = import.meta.env.VITE_API_URL
+  ? `${import.meta.env.VITE_API_URL}/predict`
+  : "http://localhost:8000/predict";
+const SIM_API = import.meta.env.VITE_API_URL
+  ? `${import.meta.env.VITE_API_URL}/simulate`
+  : "http://localhost:8000/simulate";
 
 export default function DiseaseDetect() {
 
@@ -32,6 +37,7 @@ export default function DiseaseDetect() {
     setResp(null);
     setError(null);
     setShowGradcam(false);
+    setSimulation(null);
   }
 
   function handleDragOver(e) {
@@ -65,12 +71,14 @@ export default function DiseaseDetect() {
 
     try {
       const r = await fetch(API_URL, { method: "POST", body: fd });
-      if (!r.ok) throw new Error();
+      // BUG FIX #3: Throw with meaningful message instead of empty Error()
+      if (!r.ok) throw new Error(`Server error: ${r.status} ${r.statusText}`);
       const data = await r.json();
       setResp(data);
       setSimulation(data.simulation);
-    } catch {
-      setError("Cannot connect to backend.");
+    } catch (err) {
+      console.error("Analyze error:", err);
+      setError("Cannot connect to backend. Make sure the server is running.");
     } finally {
       setLoading(false);
     }
@@ -97,11 +105,25 @@ export default function DiseaseDetect() {
     }
   }
 
+  // BUG FIX #2: Use React state reset instead of window.location.reload()
+  function resetAnalysis() {
+    setFile(null);
+    setOrigPreview(null);
+    setResp(null);
+    setError(null);
+    setShowGradcam(false);
+    setSimulation(null);
+    setDays(7);
+    setUsage(0);
+  }
+
   const pct = (v) => `${(v * 100).toFixed(2)}%`;
   const isHealthy =
     resp?.best?.label?.toLowerCase().includes("healthy") ?? false;
 
+  // BUG FIX #1: Guard against resp or resp.best being null before accessing .severity
   const getBorderColor = () => {
+    if (!resp?.best) return "border-gray-300";
     if (isHealthy) return "border-green-500";
     if (resp.best.severity === "High") return "border-red-500";
     if (resp.best.severity === "Moderate") return "border-yellow-500";
@@ -109,6 +131,7 @@ export default function DiseaseDetect() {
   };
 
   const getIcon = () => {
+    if (!resp?.best) return null;
     if (isHealthy)
       return <div className="text-green-600 text-5xl">✔</div>;
     if (resp.best.severity === "High")
@@ -117,6 +140,7 @@ export default function DiseaseDetect() {
   };
 
   const getBadgeColor = () => {
+    if (!resp?.best) return "bg-gray-100 text-gray-700";
     if (isHealthy) return "bg-green-100 text-green-700";
     if (resp.best.severity === "High")
       return "bg-red-100 text-red-700";
@@ -129,7 +153,7 @@ export default function DiseaseDetect() {
     <div className="max-w-7xl mx-auto p-8">
 
       <h2 className="text-2xl font-bold text-center mb-8">
-        Pest & Disease Detector
+        Pest &amp; Disease Detector
       </h2>
 
       {/* UPLOAD */}
@@ -143,7 +167,7 @@ export default function DiseaseDetect() {
             onDragLeave={handleDragLeave}
             onDrop={handleDrop}
           >
-            Drag & Drop or Click to Upload
+            Drag &amp; Drop or Click to Upload
             <input
               ref={fileInputRef}
               type="file"
@@ -161,14 +185,20 @@ export default function DiseaseDetect() {
             />
           )}
 
+          {/* BUG FIX #17: Disable button while loading to prevent multiple requests */}
           <button
             onClick={analyze}
-            className="px-6 py-2 bg-green-600 text-white rounded-lg"
+            disabled={loading}
+            className={`px-6 py-2 text-white rounded-lg transition ${
+              loading
+                ? "bg-gray-400 cursor-not-allowed"
+                : "bg-green-600 hover:bg-green-700"
+            }`}
           >
             {loading ? "Analyzing..." : "Analyze Image"}
           </button>
 
-          {error && <div className="text-red-600">{error}</div>}
+          {error && <div className="text-red-600 bg-red-50 border border-red-200 p-3 rounded-lg">{error}</div>}
         </div>
       )}
 
@@ -316,9 +346,10 @@ export default function DiseaseDetect() {
               </div>
             </div>
 
+            {/* BUG FIX #2: Reset state instead of reloading the whole page */}
             <button
-              onClick={() => window.location.reload()}
-              className="mt-6 w-full bg-green-600 text-white py-2 rounded-lg"
+              onClick={resetAnalysis}
+              className="mt-6 w-full bg-green-600 hover:bg-green-700 text-white py-2 rounded-lg transition"
             >
               Analyze Another Image
             </button>

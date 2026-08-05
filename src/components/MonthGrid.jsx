@@ -3,8 +3,8 @@ import { motion } from "framer-motion";
 import { CalendarDays, CheckCircle } from "lucide-react";
 
 const MONTHS = [
-  "January","February","March","April","May","June",
-  "July","August","September","October","November","December"
+  "January", "February", "March", "April", "May", "June",
+  "July", "August", "September", "October", "November", "December"
 ];
 
 const PHASE_COLORS = {
@@ -125,9 +125,8 @@ export default function MonthGrid({ startDate, phases, weather = [], onPhaseClic
           <div
             key={i}
             onClick={() => setSelectedMonth(MONTHS[m.getMonth()])}
-            className={`px-3 py-2 border-r last:border-r-0 dark:border-neutral-700 flex items-center justify-center gap-1 cursor-pointer hover:bg-emerald-50 dark:hover:bg-emerald-900/20 transition ${
-              selectedMonth === MONTHS[m.getMonth()] ? "bg-emerald-100 dark:bg-emerald-900/40 font-semibold text-emerald-700 dark:text-emerald-300" : ""
-            }`}
+            className={`px-3 py-2 border-r last:border-r-0 dark:border-neutral-700 flex items-center justify-center gap-1 cursor-pointer hover:bg-emerald-50 dark:hover:bg-emerald-900/20 transition ${selectedMonth === MONTHS[m.getMonth()] ? "bg-emerald-100 dark:bg-emerald-900/40 font-semibold text-emerald-700 dark:text-emerald-300" : ""
+              }`}
           >
             <CalendarDays className="w-4 h-4" />
             {MONTHS[m.getMonth()]}
@@ -163,9 +162,8 @@ export default function MonthGrid({ startDate, phases, weather = [], onPhaseClic
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: i * 0.02 }}
               onClick={() => onPhaseClick?.({ ...p, s, e })}
-              className={`relative px-3 py-2 rounded-lg border cursor-pointer hover:shadow-md transition-all ${
-                PHASE_COLORS[p.key] || "bg-neutral-100 dark:bg-neutral-900 border-neutral-200 dark:border-neutral-700"
-              } ${isActive ? "ring-2 ring-green-400 dark:ring-green-500" : ""} ${phaseDone ? "opacity-60 line-through" : ""}`}
+              className={`relative px-3 py-2 rounded-lg border cursor-pointer hover:shadow-md transition-all ${PHASE_COLORS[p.key] || "bg-neutral-100 dark:bg-neutral-900 border-neutral-200 dark:border-neutral-700"
+                } ${isActive ? "ring-2 ring-green-400 dark:ring-green-500" : ""} ${phaseDone ? "opacity-60 line-through" : ""}`}
             >
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">

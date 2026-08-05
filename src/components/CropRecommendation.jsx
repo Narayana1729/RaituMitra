@@ -11,7 +11,7 @@ import { CROPS } from "../data/cropMaster";
 import districtCrops from "../data/districtCrops.json";
 import { auth, db } from "../firebase";
 import { useAuthState } from "react-firebase-hooks/auth";
-import { doc, getDoc } from "firebase/firestore";
+import { doc, getDoc, collection, query, onSnapshot } from "firebase/firestore";
 
 
 /* -------------------- constants -------------------- */
@@ -123,6 +123,100 @@ const calculateEnhancedSmartScore = (crop, filters, currentSeason, weather) => {
   return Math.max(0, Math.round(finalSmartScore * 100) / 100);
 };
 
+/* -------------------- protective crop inputs helper -------------------- */
+const getCropInputs = (crop, farmingStyle = "Both") => {
+  const isOrganic = farmingStyle === "Organic";
+  const isInorganic = farmingStyle === "Inorganic";
+
+  // 1. Fertilizers mapping based on crop type
+  let fertilizers = [];
+  if (!isInorganic) {
+    // Organic recommendations
+    if (crop.type === "Grain" || crop.type === "Cash Crop") {
+      fertilizers.push("🍀 Well-decomposed Farmyard Manure (FYM) - 5-10 tons/acre during land preparation.");
+      fertilizers.push("🍀 Vermicompost or Poultry Manure - 1.5 tons/acre as a top dressing.");
+      fertilizers.push("🍀 Panchagavya or Jeevamrutha - apply monthly with irrigation to boost soil microflora.");
+    } else if (crop.type === "Pulse") {
+      fertilizers.push("🍀 Rhizobium Bio-fertilizer - inoculate seeds before sowing to boost nitrogen fixation.");
+      fertilizers.push("🍀 Rock Phosphate or Bone Meal - 200 kg/acre to provide organic phosphorus.");
+      fertilizers.push("🍀 Wood ash - 150 kg/acre during early growth to supply organic potash.");
+    } else if (crop.type === "Vegetable" || crop.type === "Fruit") {
+      fertilizers.push("🍀 Compost or Vermicompost - 3-5 kg per plant or 5 tons/acre.");
+      fertilizers.push("🍀 Neem Cake or Mustard Cake - 250 kg/acre to supply organic nitrogen and prevent soil nematodes.");
+      fertilizers.push("🍀 Seaweed Extract liquid spray - every 15 days during flowering and fruiting.");
+    } else {
+      fertilizers.push("🍀 Well-decomposed compost - 4 tons/acre during soil mixing.");
+      fertilizers.push("🍀 Azotobacter & PSB (Phosphorus Solubilizing Bacteria) bio-fertilizers.");
+    }
+  }
+  
+  if (!isOrganic) {
+    // Inorganic recommendations
+    if (crop.type === "Grain") {
+      fertilizers.push("🧪 Urea (Nitrogen) - 80-100 kg/acre split in 3 doses (basal, tillering, jointing).");
+      fertilizers.push("🧪 DAP (Diammonium Phosphate) - 50 kg/acre as basal dose during sowing.");
+      fertilizers.push("🧪 MOP (Muriate of Potash) - 30 kg/acre during panicle initiation.");
+    } else if (crop.type === "Pulse") {
+      fertilizers.push("🧪 Urea - low starter dose of 15-20 kg/acre (pulses fix their own nitrogen).");
+      fertilizers.push("🧪 Single Super Phosphate (SSP) - 100 kg/acre to provide phosphorus and essential sulfur.");
+      fertilizers.push("🧪 MOP - 20 kg/acre to strengthen roots.");
+    } else if (crop.type === "Vegetable" || crop.type === "Fruit") {
+      fertilizers.push("🧪 NPK 19:19:19 complex - 50 kg/acre during vegetative growth.");
+      fertilizers.push("🧪 DAP - 60 kg/acre as a basal application.");
+      fertilizers.push("🧪 Calcium Nitrate & Boron spray - during fruit setting to prevent cracking and blossom-end rot.");
+    } else {
+      fertilizers.push("🧪 NPK 12:32:16 complex - 40 kg/acre as basal application.");
+      fertilizers.push("🧪 Urea - 25 kg/acre split as top dressing.");
+    }
+  }
+
+  // 2. Pesticides mapping based on crop commonRisks
+  let pesticides = [];
+  const risks = crop.commonRisks || [];
+  
+  risks.forEach(risk => {
+    const riskLower = risk.toLowerCase();
+    
+    let organicPest = "";
+    let chemicalPest = "";
+
+    if (riskLower.includes("wilt") || riskLower.includes("rot")) {
+      organicPest = `Trichoderma viride bio-fungicide soil application (2kg/acre mixed with compost).`;
+      chemicalPest = `Carbendazim 50% WP or Copper Oxychloride at 2g/liter as a soil drench.`;
+    } else if (riskLower.includes("rust") || riskLower.includes("blight") || riskLower.includes("mildew") || riskLower.includes("spot")) {
+      organicPest = `Spray Neem Oil (3000 ppm) at 5ml/liter or Pseudomonas fluorescens spray (10g/liter).`;
+      chemicalPest = `Mancozeb 75% WP or Propiconazole 25% EC at 1.5ml/liter of water.`;
+    } else if (riskLower.includes("aphids") || riskLower.includes("thrips") || riskLower.includes("whitefly") || riskLower.includes("mite") || riskLower.includes("hopper")) {
+      organicPest = `Spray Neem Seed Kernel Extract (NSKE 5%) or set up Yellow Sticky Traps (10 traps/acre).`;
+      chemicalPest = `Imidacloprid 17.8% SL (0.5 ml/liter) or Acetamiprid 20% SP (0.5g/liter).`;
+    } else if (riskLower.includes("borer") || riskLower.includes("worm") || riskLower.includes("caterpillar") || riskLower.includes("bug")) {
+      organicPest = `Bacillus thuringiensis (Bt) at 2g/liter or configure Pheromone Traps (5/acre).`;
+      chemicalPest = `Coragen (Chlorantraniliprole 18.5% SC) at 0.4 ml/liter or Emamectin Benzoate 5% SG.`;
+    } else {
+      organicPest = `Foliar spray of multi-herb liquid extract (Agniastra/Neem Astra) at 10ml/liter.`;
+      chemicalPest = `Broad-spectrum Chlorpyrifos 20% EC at 2ml/liter.`;
+    }
+
+    if (!isInorganic) {
+      pesticides.push(`🍀 For ${risk} (Organic): ${organicPest}`);
+    }
+    if (!isOrganic) {
+      pesticides.push(`🧪 For ${risk} (Chemical): ${chemicalPest}`);
+    }
+  });
+
+  if (pesticides.length === 0) {
+    if (!isInorganic) {
+      pesticides.push("🍀 General Protection (Organic): Spray Neem Oil preventive dose (3ml/liter) every 20 days.");
+    }
+    if (!isOrganic) {
+      pesticides.push("🧪 General Protection (Chemical): Spray preventive systemic fungicide if crop spot diseases are active locally.");
+    }
+  }
+
+  return { fertilizers, pesticides };
+};
+
 /* -------------------- small UI bits -------------------- */
 const FilterSelect = ({ name, label, value, onChange, options, placeholder }) => (
   <div>
@@ -199,19 +293,65 @@ export default function EnhancedCropRecommendations() {
   const initialFilters = { 
     state: "", district: "", soilType: "", previousCrops: ["", "", ""],
     waterSources: [], investmentBudget: "", growingDuration: "",
-    soilPh: "", soilEc: "", soilCarbon: ""
+    soilPh: "", soilEc: "", soilCarbon: "", farmingStyle: ""
   };
   
   const [filters, setFilters] = useState(initialFilters);
   const [weather, setWeather] = useState(null);
+  const [weatherForecast, setWeatherForecast] = useState(null);
   const [weatherError, setWeatherError] = useState("");
   const [recommendations, setRecommendations] = useState([]);
   const [hasSearched, setHasSearched] = useState(false);
   const [selectedCrop, setSelectedCrop] = useState(null);
   const [season] = useState(getCurrentSeason());
+  const [liveMsp, setLiveMsp] = useState({});
   // ✅ Profile linking
-const [user] = useAuthState(auth);
-const [profileLoaded, setProfileLoaded] = useState(false);
+  const [user] = useAuthState(auth);
+  const [profileLoaded, setProfileLoaded] = useState(false);
+
+  // Compute weather warnings memo dynamically
+  const weatherAlerts = useMemo(() => {
+    if (!weatherForecast?.list) return [];
+    const alerts = [];
+    let heavyRain = false;
+    let heatwave = false;
+    let highWind = false;
+    
+    // Check next 48 hours (first 16 entries of 3-hour forecasts)
+    const nextThreeDays = weatherForecast.list.slice(0, 16);
+    for (let entry of nextThreeDays) {
+      const rain = entry.rain?.["3h"] || 0;
+      const tempMax = entry.main?.temp_max || 0;
+      const windSpeed = entry.wind?.speed || 0;
+      
+      if (rain > 10) heavyRain = true;
+      if (tempMax > 38) heatwave = true;
+      if (windSpeed > 12) highWind = true;
+    }
+    
+    if (heavyRain) {
+      alerts.push({
+        type: "rain",
+        msg: "🌧️ Heavy rain expected in next 48h. Postpone sowing to prevent seed washing or rot!",
+        severity: "high"
+      });
+    }
+    if (heatwave) {
+      alerts.push({
+        type: "heat",
+        msg: "🔥 Extreme heatwave predicted (>38°C). Keep fields well-irrigated and shade nursery beds!",
+        severity: "high"
+      });
+    }
+    if (highWind) {
+      alerts.push({
+        type: "wind",
+        msg: "💨 High winds expected. Tall crops (like maize or sugarcane) may need dynamic protective support.",
+        severity: "medium"
+      });
+    }
+    return alerts;
+  }, [weatherForecast]);
 
 
   const requiredFields = ['state', 'district', 'soilType', 'waterSources', 'investmentBudget', 'growingDuration'];
@@ -243,6 +383,23 @@ useEffect(() => {
         const p = data.profile || {};
         const pref = data.preferences || {};
 
+        // Dynamic Soil Sync
+        const soil = data.soilData || {};
+        let parsedPh = "";
+        let parsedCarbon = "";
+
+        if (soil.pH && soil.pH !== "N/A") {
+          const phVal = parseFloat(soil.pH);
+          // SoilGrids pH is scaled by 10 (e.g. 6.5 is stored as 65 or 6.5)
+          parsedPh = phVal > 14 ? (phVal / 10).toFixed(1) : phVal.toFixed(1);
+        }
+
+        if (soil.SOC && soil.SOC !== "N/A") {
+          const socVal = parseFloat(soil.SOC);
+          // SoilGrids organic carbon is g/kg, divide by 10 to get organic carbon percentage %
+          parsedCarbon = socVal > 10 ? (socVal / 10).toFixed(2) : socVal.toFixed(2);
+        }
+
         // Fill available profile values into filters
         setFilters((prev) => ({
           ...prev,
@@ -250,6 +407,8 @@ useEffect(() => {
           district: p.district || prev.district,
           soilType: pref.soilType || prev.soilType,
           waterSources: pref.waterSources || prev.waterSources,
+          soilPh: parsedPh || prev.soilPh,
+          soilCarbon: parsedCarbon || prev.soilCarbon,
         }));
       }
     } catch (err) {
@@ -263,18 +422,55 @@ useEffect(() => {
 }, [user]);
 
 
+  // Load real-time MSP prices published by Admin
+  useEffect(() => {
+    const mspRef = collection(db, "msp");
+    const unsub = onSnapshot(mspRef, (snap) => {
+      const prices = {};
+      snap.docs.forEach((doc) => {
+        const d = doc.data();
+        if (d.crop && (d.price || d.value)) {
+          // Normalize key to lower case
+          const cropKey = d.crop.toLowerCase().trim();
+          prices[cropKey] = d.price || d.value;
+        }
+      });
+      setLiveMsp(prices);
+    });
+    return () => unsub();
+  }, []);
+
   /* --- debounced weather fetch --- */
   useDebouncedEffect(() => {
-    if (!filters.district) { setWeather(null); setWeatherError(""); return; }
+    if (!filters.district) {
+      setWeather(null);
+      setWeatherForecast(null);
+      setWeatherError("");
+      return;
+    }
     let cancelled = false;
     const fetchWeather = async () => {
       try {
         const apiKey = import.meta.env.VITE_OPENWEATHER_API_KEY;
-        const url = `https://api.openweathermap.org/data/2.5/weather?q=${filters.district},${filters.state},IN&units=metric&appid=${apiKey}`;
-        const { data } = await axios.get(url);
-        if (!cancelled) { setWeather(data); setWeatherError(""); }
+        const weatherUrl = `https://api.openweathermap.org/data/2.5/weather?q=${filters.district},${filters.state},IN&units=metric&appid=${apiKey}`;
+        const forecastUrl = `https://api.openweathermap.org/data/2.5/forecast?q=${filters.district},${filters.state},IN&units=metric&appid=${apiKey}`;
+        
+        const [weatherRes, forecastRes] = await Promise.all([
+          axios.get(weatherUrl),
+          axios.get(forecastUrl)
+        ]);
+
+        if (!cancelled) {
+          setWeather(weatherRes.data);
+          setWeatherForecast(forecastRes.data);
+          setWeatherError("");
+        }
       } catch {
-        if (!cancelled) { setWeather(null); setWeatherError("Could not fetch live weather data."); }
+        if (!cancelled) {
+          setWeather(null);
+          setWeatherForecast(null);
+          setWeatherError("Could not fetch live weather forecast.");
+        }
       }
     };
     fetchWeather();
@@ -322,23 +518,62 @@ useEffect(() => {
 
   /* --- compute recommendations (memoize heavy parts) --- */
   const computeRecommendations = useCallbackRef(() => {
-    let filtered = CROPS.filter(crop => districtCrops[filters.district]?.includes(crop.name));
-    filtered = filtered.filter(crop => crop.seasons.includes(season) || ["Annual", "Perennial"].includes(crop?.seasons?.[0]));
-    filtered = filtered.filter(crop => crop.soil.includes(filters.soilType));
-    const [minDur, maxDur] = (filters.growingDuration || "1-999").split('-').map(Number);
-    filtered = filtered.filter(c => c.growingDuration >= (minDur || 1) && c.growingDuration <= (maxDur || 999));
-    filtered = filtered.filter(c => c.investment <= Number(filters.investmentBudget));
+    const districtList = districtCrops[filters.district] || [];
+    
+    // 1. Flexible Casing & Substring Name matching
+    let filtered = CROPS.filter(crop => {
+      const cropNameLower = crop.name.toLowerCase().trim();
+      return districtList.some(dn => {
+        const dnLower = dn.toLowerCase().trim();
+        return dnLower.includes(cropNameLower) || cropNameLower.includes(dnLower);
+      });
+    });
 
-    // 💧 Water logic same
+    // 2. Season Loose Fallback (Zaid allows Kharif since sowing/planning happens in Zaid)
+    const allowedSeasons = [season, "Annual", "Perennial"];
+    if (season === "Zaid") {
+      allowedSeasons.push("Kharif");
+    }
+    const seasonFiltered = filtered.filter(crop => {
+      return crop.seasons.some(s => allowedSeasons.includes(s)) || 
+             ["Annual", "Perennial"].includes(crop?.seasons?.[0]);
+    });
+    if (seasonFiltered.length > 0) {
+      filtered = seasonFiltered;
+    }
+
+    // 3. Soil Loose Fallback
+    const soilFiltered = filtered.filter(crop => crop.soil.includes(filters.soilType));
+    if (soilFiltered.length > 0) {
+      filtered = soilFiltered;
+    }
+
+    // 4. Growing Duration Loose Fallback
+    const [minDur, maxDur] = (filters.growingDuration || "1-999").split('-').map(Number);
+    const durationFiltered = filtered.filter(c => c.growingDuration >= (minDur || 1) && c.growingDuration <= (maxDur || 999));
+    if (durationFiltered.length > 0) {
+      filtered = durationFiltered;
+    }
+
+    // 5. Budget Loose Fallback
+    const budgetFiltered = filtered.filter(c => c.investment <= Number(filters.investmentBudget));
+    if (budgetFiltered.length > 0) {
+      filtered = budgetFiltered;
+    }
+
+    // 6. Water Sources Loose Fallback
     const waterLevels = new Set((filters.waterSources || []).map(s => ({
       "Rainwater": "low", "Pond/Well": "low", "Borewell/Tubewell": "medium", "Canal Irrigation": "high"
     })[s]));
     const userHas = { high: waterLevels.has('high'), medium: waterLevels.has('medium'), low: waterLevels.has('low') };
-    filtered = filtered.filter(c =>
+    const waterFiltered = filtered.filter(c =>
       (c.water === 'high' && userHas.high) ||
       (c.water === 'medium' && (userHas.high || userHas.medium)) ||
       (c.water === 'low' && (userHas.high || userHas.medium || userHas.low))
     );
+    if (waterFiltered.length > 0) {
+      filtered = waterFiltered;
+    }
 
     /* 🚫 NEW ROTATION EXCLUSION LOGIC */
     const prevCrops = (filters.previousCrops || []).filter(Boolean);
@@ -361,12 +596,21 @@ useEffect(() => {
         filtered = filtered.filter(c => c.cropFamily !== familyBlocked);
     }
 
-    const processed = filtered.map(crop => ({
-      ...crop,
-      plantingWeather: getSeasonalWeatherPrediction(crop.plantingMonths),
-      harvestWeather: getSeasonalWeatherPrediction(crop.harvestMonths),
-      smartScore: calculateEnhancedSmartScore(crop, filters, season, weather)
-    }));
+    const processed = filtered.map(crop => {
+      const cropKey = crop.name.toLowerCase().trim();
+      const livePrice = liveMsp[cropKey];
+      let updatedCrop = { ...crop };
+      if (livePrice) {
+        updatedCrop.marketPrice = `₹${livePrice}/quintal`;
+        updatedCrop.isLivePrice = true;
+      }
+      return {
+        ...updatedCrop,
+        plantingWeather: getSeasonalWeatherPrediction(updatedCrop.plantingMonths),
+        harvestWeather: getSeasonalWeatherPrediction(updatedCrop.harvestMonths),
+        smartScore: calculateEnhancedSmartScore(updatedCrop, filters, season, weather)
+      };
+    });
 
     processed.sort((a, b) => b.smartScore - a.smartScore);
     setRecommendations(processed);
@@ -438,7 +682,14 @@ useEffect(() => {
               <div className="flex items-center gap-3">
                 <span className="text-4xl">{selectedCrop.icon}</span>
                 <div>
-                  <h2 className="text-2xl font-bold text-gray-900 dark:text-gray-100">{selectedCrop.name}</h2>
+                  <h2 className="text-2xl font-bold text-gray-900 dark:text-gray-100 flex items-center gap-2">
+                    {selectedCrop.name}
+                    {selectedCrop.isLivePrice && (
+                      <span className="inline-flex items-center text-xs font-extrabold px-2 py-0.5 rounded bg-gradient-to-r from-amber-500 to-orange-500 text-white animate-pulse shadow-sm">
+                        ⚡ LIVE MSP
+                      </span>
+                    )}
+                  </h2>
                   <p className="text-sm text-gray-500 dark:text-gray-400">{selectedCrop.type} ({selectedCrop.cropFamily})</p>
                 </div>
               </div>
@@ -461,7 +712,7 @@ useEffect(() => {
                     <ul className="space-y-2 text-sm text-gray-600 dark:text-gray-300">
                       <li><strong>Investment:</strong> ₹{selectedCrop.investment.toLocaleString()}/acre</li>
                       <li><strong>Expected Yield:</strong> {selectedCrop.avgYield} quintals/acre</li>
-                      <li><strong>Market Price:</strong> {selectedCrop.marketPrice}</li>
+                      <li><strong>Market Price:</strong> {selectedCrop.marketPrice} {selectedCrop.isLivePrice && <span className="text-amber-500 font-bold ml-1">(Live Admin MSP)</span>}</li>
                       <li><strong>Export Potential:</strong> {selectedCrop.exportPotential}</li>
                       <li><strong>Mechanization Level:</strong> {selectedCrop.mechanization}</li>
                     </ul>
@@ -525,6 +776,38 @@ useEffect(() => {
                 <h3 className="text-lg font-semibold text-gray-800 dark:text-gray-200 mb-2">Special Notes</h3>
                 <p className="text-sm text-gray-600 dark:text-gray-300">{selectedCrop.specialNotes}</p>
               </div>
+              {/* Dynamic Fertilizers and Pesticides protection block */}
+              {(() => {
+                const { fertilizers, pesticides } = getCropInputs(selectedCrop, filters.farmingStyle);
+                return (
+                  <div className="mt-6 pt-6 border-t dark:border-gray-700 grid grid-cols-1 md:grid-cols-2 gap-6 bg-emerald-50/30 dark:bg-emerald-950/10 p-5 rounded-xl border border-emerald-100/50 dark:border-emerald-900/30">
+                    <div>
+                      <h3 className="text-md font-bold text-emerald-800 dark:text-emerald-300 mb-3 flex items-center gap-2">
+                        <Leaf className="w-5 h-5 text-emerald-600 dark:text-emerald-400" /> Recommended Fertilizers & Soil Nutrients
+                      </h3>
+                      <ul className="space-y-2 text-xs text-gray-750 dark:text-gray-350">
+                        {fertilizers.map((f, i) => (
+                          <li key={i} className="flex items-start gap-2 bg-white dark:bg-gray-850 p-2.5 rounded border border-gray-150 dark:border-gray-700 shadow-sm leading-relaxed">
+                            {f}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                    <div>
+                      <h3 className="text-md font-bold text-amber-800 dark:text-amber-300 mb-3 flex items-center gap-2">
+                        <Shield className="w-5 h-5 text-amber-600 dark:text-amber-400" /> Recommended Pest & Disease Protections
+                      </h3>
+                      <ul className="space-y-2 text-xs text-gray-755 dark:text-gray-355">
+                        {pesticides.map((p, i) => (
+                          <li key={i} className="flex items-start gap-2 bg-white dark:bg-gray-850 p-2.5 rounded border border-gray-150 dark:border-gray-700 shadow-sm leading-relaxed">
+                            {p}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  </div>
+                );
+              })()}
             </div>
           </div>
         </div>
@@ -624,6 +907,24 @@ useEffect(() => {
                     </div>
                   </div>
                 </div>
+                {/* Optional Farming Style */}
+                <div className="sm:col-span-2 border-t dark:border-gray-700 pt-4 mt-3">
+                  <h4 className="text-sm font-semibold text-gray-800 dark:text-gray-200 mb-2">Farming Style (Optional)</h4>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <FilterSelect
+                      name="farmingStyle"
+                      label="Preferred Practice"
+                      value={filters.farmingStyle}
+                      onChange={handleFilterChange}
+                      options={[
+                        { label: "🍀 100% Organic (Bio-inputs)", value: "Organic" },
+                        { label: "🧪 Inorganic (Conventional Chemicals)", value: "Inorganic" },
+                        { label: "🔄 Conventional Mix (Both)", value: "Both" }
+                      ]}
+                      placeholder="Select Farming Practice"
+                    />
+                  </div>
+                </div>
               </div>
 
               {/* Intelligence panel */}
@@ -634,14 +935,33 @@ useEffect(() => {
                   </h3>
                   <div className="space-y-2">
                      <div className="flex items-center text-sm text-blue-700 dark:text-blue-300"><Calendar className="w-4 h-4 mr-2"/> Current Season: <strong className="ml-1">{season}</strong></div>
-      <div className="flex items-center text-sm text-blue-700 dark:text-blue-300"><Zap className="w-4 h-4 mr-2"/> Enhanced AI with 105+ crops data.</div>
-      <div className="pt-2 border-t border-blue-200 dark:border-blue-800 mt-2">
+      <div className="flex items-center text-sm text-blue-700 dark:text-blue-300"><Zap className="w-4 h-4 mr-2"/> Enhanced AI with 105+ crops data.</div>
+      <div className="pt-2 border-t border-blue-200 dark:border-blue-800 mt-2">
                       {weather ? (
                         <>
                           <div className="flex items-center text-sm font-semibold text-blue-800 dark:text-blue-200"><MapPin className="w-4 h-4 mr-2"/>Live Weather: {weather.name}</div>
-            <div className="flex items-center text-sm text-blue-700 dark:text-blue-300"><Thermometer className="w-4 h-4 mr-2"/>{Math.round(weather.main.temp)}°C, feels like {Math.round(weather.main.feels_like)}°C</div>
-            <div className="flex items-center text-sm text-blue-700 dark:text-blue-300"><Droplets className="w-4 h-4 mr-2"/>Humidity: {weather.main.humidity}%</div>
-            <div className="flex items-center text-sm text-blue-700 dark:text-blue-300"><Wind className="w-4 h-4 mr-2"/>Wind: {weather.wind.speed} m/s</div>
+            <div className="flex items-center text-sm text-blue-700 dark:text-blue-300"><Thermometer className="w-4 h-4 mr-2"/>{Math.round(weather.main.temp)}°C, feels like {Math.round(weather.main.feels_like)}°C</div>
+            <div className="flex items-center text-sm text-blue-700 dark:text-blue-300"><Droplets className="w-4 h-4 mr-2"/>Humidity: {weather.main.humidity}%</div>
+            <div className="flex items-center text-sm text-blue-700 dark:text-blue-300"><Wind className="w-4 h-4 mr-2"/>Wind: {weather.wind.speed} m/s</div>
+                          {weatherAlerts.length > 0 && (
+                            <div className="pt-3 border-t border-red-200 dark:border-red-800 mt-3 space-y-2">
+                              <div className="text-xs font-bold text-red-600 dark:text-red-400 uppercase tracking-wider flex items-center gap-1.5">
+                                <AlertTriangle size={14} className="text-red-500 animate-bounce" /> Active Alerts (Next 48h)
+                              </div>
+                              {weatherAlerts.map((alert, idx) => (
+                                <div
+                                  key={idx}
+                                  className={`p-2.5 rounded-lg text-xs leading-relaxed ${
+                                    alert.severity === 'high'
+                                      ? 'bg-red-100 text-red-900 border border-red-200 dark:bg-red-950/40 dark:text-red-200 dark:border-red-900'
+                                      : 'bg-amber-100 text-amber-900 border border-amber-200 dark:bg-amber-950/40 dark:text-amber-200 dark:border-amber-900'
+                                  }`}
+                                >
+                                  {alert.msg}
+                                </div>
+                              ))}
+                            </div>
+                          )}
                         </>
                       ) : ( <div className="text-sm text-emerald-800 dark:text-emerald-200">{weatherError || "Select a district for live weather."}</div> )}
                     </div>
@@ -758,7 +1078,14 @@ useEffect(() => {
                     <div className="flex items-center gap-4 mb-3">
                       <span className="text-5xl">{crop.icon}</span>
                       <div>
-                        <h3 className="text-2xl font-bold text-gray-800 dark:text-gray-100">{crop.name}</h3>
+                        <h3 className="text-2xl font-bold text-gray-800 dark:text-gray-100 flex items-center gap-2">
+                          {crop.name}
+                          {crop.isLivePrice && (
+                            <span className="inline-flex items-center text-[10px] font-extrabold px-1.5 py-0.5 rounded bg-gradient-to-r from-amber-500 to-orange-500 text-white animate-pulse shadow-sm">
+                              ⚡ LIVE MSP
+                            </span>
+                          )}
+                        </h3>
                         <p className="text-sm text-gray-500 dark:text-gray-400">{crop.type} • {crop.growingDuration} months</p>
                         <p className="text-xs text-gray-400 dark:text-gray-500">
                           Smart Score: <span className="font-bold text-rb-gradient">{crop.smartScore}</span>/100
@@ -767,6 +1094,11 @@ useEffect(() => {
                     </div>
 
                     <div className="flex flex-wrap gap-2 mb-4">
+                      {crop.isLivePrice && (
+                        <div className="flex items-center text-xs font-bold px-2 py-1 rounded-full text-amber-700 bg-amber-100 dark:text-amber-300 dark:bg-amber-900/40 animate-pulse">
+                          <Zap size={12} className="mr-1 fill-amber-500 text-amber-500"/> Live MSP Override
+                        </div>
+                      )}
                       <div className={`flex items-center text-xs font-semibold px-2 py-1 rounded-full ${crop.marketDemand === 'Very High' ? 'text-emerald-700 bg-emerald-100 dark:text-emerald-300 dark:bg-emerald-900/40' : crop.marketDemand === 'High' ? 'text-green-700 bg-green-100 dark:text-green-300 dark:bg-green-900/40' : crop.marketDemand === 'Medium' ? 'text-yellow-700 bg-yellow-100 dark:text-yellow-300 dark:bg-yellow-900/40' : 'text-red-700 bg-red-100 dark:text-red-300 dark:bg-red-900/40'}`}><TrendingUp size={12} className="mr-1"/>Market: {crop.marketDemand}</div>
                       <div className={`flex items-center text-xs font-semibold px-2 py-1 rounded-full ${crop.riskFactor === 'High' ? 'text-red-700 bg-red-100 dark:text-red-300 dark:bg-red-900/40' : crop.riskFactor === 'Medium' ? 'text-yellow-700 bg-yellow-100 dark:text-yellow-300 dark:bg-yellow-900/40' : 'text-green-700 bg-green-100 dark:text-green-300 dark:bg-green-900/40'}`}><Shield size={12} className="mr-1"/>Risk: {crop.riskFactor}</div>
                       <div className={`flex items-center text-xs font-semibold px-2 py-1 rounded-full ${(crop.waterEfficiency || '').includes('Very High') ? 'text-blue-700 bg-blue-100 dark:text-blue-300 dark:bg-blue-900/40' : (crop.waterEfficiency || '').includes('High') ? 'text-blue-600 bg-blue-100 dark:text-blue-300 dark:bg-blue-900/40' : 'text-orange-700 bg-orange-100 dark:text-orange-300 dark:bg-orange-900/40'}`}><Droplets size={12} className="mr-1"/>{crop.waterEfficiency} Water</div>

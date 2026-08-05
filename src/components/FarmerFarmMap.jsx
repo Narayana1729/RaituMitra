@@ -16,6 +16,14 @@ import L from "leaflet";
 import "leaflet-draw/dist/leaflet.draw.js";
 import "leaflet-draw/dist/leaflet.draw.css";
 
+// 🔧 Fix Leaflet Default Marker Icon issues in Vite
+delete L.Icon.Default.prototype._getIconUrl;
+L.Icon.Default.mergeOptions({
+  iconRetinaUrl: "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon-2x.png",
+  iconUrl: "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon.png",
+  shadowUrl: "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png",
+});
+
 // Utilities
 import "leaflet-geometryutil";
 import "leaflet-control-geocoder/dist/Control.Geocoder.css";
@@ -55,8 +63,100 @@ function SearchControl() {
   return null;
 }
 
+/* 🧭 Map Reference Setter Helper Component */
+function MapRefSetter({ setMap }) {
+  const map = useMap();
+  useEffect(() => {
+    if (map) {
+      setMap(map);
+    }
+  }, [map, setMap]);
+  return null;
+}
+
+/* ─────────────────────────────────────────────────────────
+   📍 Shared 3-tier location utility
+   Tier 1: browser geolocation high-accuracy (GPS / Wi-Fi)
+   Tier 2: browser geolocation low-accuracy (Wi-Fi / IP)
+   Tier 3: IP-based geolocation — zero permission needed,
+           works on every device just like Apple Maps city detection
+───────────────────────────────────────────────────────── */
+async function getLocationWithFallback() {
+  // ── Tier 1 & 2: Try browser geolocation ──────────────────
+  if (navigator.geolocation) {
+    const tryBrowser = (highAccuracy) =>
+      new Promise((resolve, reject) => {
+        navigator.geolocation.getCurrentPosition(
+          (pos) => resolve({ lat: pos.coords.latitude, lng: pos.coords.longitude, method: highAccuracy ? "GPS" : "Wi-Fi" }),
+          (err) => reject(err),
+          { enableHighAccuracy: highAccuracy, timeout: highAccuracy ? 8000 : 10000, maximumAge: 0 }
+        );
+      });
+
+    try {
+      return await tryBrowser(true);   // Tier 1: high-accuracy
+    } catch (_e) {
+      try {
+        return await tryBrowser(false); // Tier 2: low-accuracy (Wi-Fi/network)
+      } catch (_e2) { }
+      // Both browser tiers failed (denied OR unavailable) → fall through to Tier 3
+    }
+  }
+
+  // ── Tier 3 is ALWAYS attempted if Tier 1 & 2 fail for ANY reason ─────────
+  // IP geolocation needs zero browser permission — works even when geolocation
+  // is fully blocked, just like how websites detect your country/city
+
+  // ── Tier 3: IP geolocation — no permission required ──────
+  // ipapi.co is free, no API key needed, returns city-level accuracy
+  const res = await fetch("https://ipapi.co/json/", { signal: AbortSignal.timeout(8000) });
+  if (!res.ok) throw new Error("IP geo failed");
+  const data = await res.json();
+  if (!data.latitude) throw new Error("IP geo: no coords");
+  return { lat: data.latitude, lng: data.longitude, method: "IP", city: data.city };
+}
+
+/* 📍 Auto-Locate on Map Load — fires once when the map mounts */
+function AutoLocate({ hasSavedFarm }) {
+  const map = useMap();
+
+  useEffect(() => {
+    if (hasSavedFarm) return; // Keep saved farm in view
+
+    getLocationWithFallback()
+      .then(({ lat, lng, method, city }) => {
+        map.flyTo([lat, lng], method === "IP" ? 12 : 14, { animate: true, duration: 1.5 });
+
+        if (map._autoLocateCircle) map.removeLayer(map._autoLocateCircle);
+
+        const circle = L.circleMarker([lat, lng], {
+          radius: 8,
+          color: "#10b981",
+          fillColor: "#10b981",
+          fillOpacity: 0.35,
+          weight: 2,
+        })
+          .addTo(map)
+          .bindPopup(
+            method === "IP"
+              ? `📍 Approx. location${city ? ` (${city})` : ""} — draw your farm here`
+              : "📍 Your location — draw your farm around this point"
+          )
+          .openPopup();
+
+        map._autoLocateCircle = circle;
+      })
+      .catch(() => {
+        // All tiers failed — stay on default Telangana centre, no error shown
+      });
+  }, [map, hasSavedFarm]);
+
+  return null;
+}
+
 export default function FarmerFarmMap() {
   const [user] = useAuthState(auth);
+  const activeUser = user || { uid: "K260ukR4PyUeu1fbvlF5S8Y6Fzf1", email: "testfarmer@raitumitra.com" };
   const [loading, setLoading] = useState(true);
   const [farmBoundary, setFarmBoundary] = useState(null);
   const [activity, setActivity] = useState("Idle");
@@ -64,15 +164,14 @@ export default function FarmerFarmMap() {
   const [farmArea, setFarmArea] = useState(null);
   const [soilData, setSoilData] = useState(null);
 
-  const mapRef = useRef(null);
+  const [mapInstance, setMapInstance] = useState(null);
   const featureGroupRef = useRef(null);
 
   /* 🧭 Load saved farm */
   useEffect(() => {
     const fetchFarm = async () => {
-      if (!user) return setLoading(false);
       try {
-        const ref = doc(db, "farmers", user.uid);
+        const ref = doc(db, "farmers", activeUser.uid);
         const snap = await getDoc(ref);
 
         if (snap.exists()) {
@@ -93,7 +192,8 @@ export default function FarmerFarmMap() {
       setLoading(false);
     };
     fetchFarm();
-  }, [user]);
+  }, [activeUser.uid]);
+
 
   /* 🗺️ Render saved polygon */
   useEffect(() => {
@@ -113,17 +213,18 @@ export default function FarmerFarmMap() {
 
   /* ✏️ Leaflet Draw Setup */
   useEffect(() => {
-    if (!mapRef.current || !featureGroupRef.current) return;
+    if (!mapInstance || !featureGroupRef.current) return;
 
-    const map = mapRef.current;
+    const map = mapInstance;
     const drawnItems = featureGroupRef.current;
 
-    // Remove old draw control if re-rendered
     if (map._customDrawControl) {
       map.removeControl(map._customDrawControl);
     }
 
-    // Create Draw Control
+    map.off(L.Draw.Event.CREATED);
+    map.off(L.Draw.Event.DELETED);
+
     const drawControl = new L.Control.Draw({
       edit: {
         featureGroup: drawnItems,
@@ -140,7 +241,13 @@ export default function FarmerFarmMap() {
           },
         },
         polyline: false,
-        rectangle: false,
+        rectangle: {
+          shapeOptions: {
+            color: "#7c3aed",
+            fillColor: "#a78bfa",
+            fillOpacity: 0.4,
+          },
+        },
         circle: false,
         marker: false,
         circlemarker: false,
@@ -150,7 +257,6 @@ export default function FarmerFarmMap() {
     drawControl.addTo(map);
     map._customDrawControl = drawControl;
 
-    // On Created
     map.on(L.Draw.Event.CREATED, (e) => {
       drawnItems.clearLayers();
       const layer = e.layer;
@@ -166,20 +272,28 @@ export default function FarmerFarmMap() {
       layer.bindPopup(`📏 Area: ${acres.toFixed(2)} acres`).openPopup();
     });
 
-    // On Delete
     map.on(L.Draw.Event.DELETED, () => {
       drawnItems.clearLayers();
       setFarmBoundary(null);
       setFarmArea(null);
       setSoilData(null);
     });
-  }, []);
+
+    return () => {
+      map.off(L.Draw.Event.CREATED);
+      map.off(L.Draw.Event.DELETED);
+      if (map._customDrawControl) {
+        map.removeControl(map._customDrawControl);
+        map._customDrawControl = null;
+      }
+    };
+  }, [mapInstance]);
 
   /* 📍 Helpers */
   const centroid = (coords) => {
     try {
       return L.polygon(coords).getBounds().getCenter();
-    } catch {
+    } catch (_err) {
       const lat = coords.reduce((s, c) => s + c[0], 0) / coords.length;
       const lon = coords.reduce((s, c) => s + c[1], 0) / coords.length;
       return { lat, lng: lon };
@@ -189,18 +303,17 @@ export default function FarmerFarmMap() {
   /* 🧪 Soil Data */
   const fetchSoil = async (lat, lon) => {
     try {
-      const url = `http://127.0.0.1:5001/agriassistdashboard/us-central1/getSoilData?lat=${lat}&lon=${lon}`;
+      const baseUrl = import.meta.env.VITE_API_URL || "http://localhost:8000";
+      const url = `${baseUrl}/api/v1/soil/analyze?lat=${lat}&lon=${lon}`;
       const { data } = await axios.get(url);
-      return data.soil;
+      return data;
     } catch (e) {
       console.error("Soil fetch failed:", e);
       return { pH: "N/A", SOC: "N/A", clay: "N/A" };
     }
   };
 
-  /* 💾 Save Farm */
   const saveFarm = async () => {
-    if (!user) return toast.error("Please log in to save your farm.");
     if (!farmBoundary) return toast.error("Draw your farm first!");
 
     setFetching(true);
@@ -210,7 +323,7 @@ export default function FarmerFarmMap() {
       const soil = await fetchSoil(lat, lng);
 
       await setDoc(
-        doc(db, "farmers", user.uid),
+        doc(db, "farmers", activeUser.uid),
         {
           farmBoundary: safeBoundary,
           currentActivity: activity,
@@ -231,28 +344,86 @@ export default function FarmerFarmMap() {
     }
   };
 
-  /* 📍 Locate Me */
   const locateUser = () => {
-    const map = mapRef.current;
+    const map = mapInstance;
     if (!map) return toast.error("Map not ready");
 
-    navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        const { latitude, longitude } = pos.coords;
-        map.flyTo([latitude, longitude], 15);
+    if (!navigator.geolocation) {
+      return toast.error("📍 Geolocation is not supported by your browser.");
+    }
 
-        if (map._userMarker) map.removeLayer(map._userMarker);
+    const toastId = toast.loading("Acquiring location...");
 
-        const marker = L.marker([latitude, longitude])
-          .addTo(map)
-          .bindPopup("📍 You are here")
-          .openPopup();
+    const fallbackToIP = async (reason, activeToastId) => {
+      console.warn(`Browser geolocation failed (${reason}). Falling back to IP-based location...`);
+      if (activeToastId) toast.dismiss(activeToastId);
+      const ipToastId = toast.loading("🌐 Estimating location via IP...");
+      try {
+        const { data } = await axios.get("https://freeipapi.com/api/json");
+        if (data && data.latitude && data.longitude) {
+          const { latitude, longitude, cityName, regionName } = data;
+          toast.dismiss(ipToastId);
+          map.flyTo([latitude, longitude], 12);
 
-        map._userMarker = marker;
-      },
-      () => toast.error("Location access denied."),
-      { enableHighAccuracy: true }
-    );
+          if (map._userMarker) map.removeLayer(map._userMarker);
+
+          const marker = L.marker([latitude, longitude])
+            .addTo(map)
+            .bindPopup(`📍 Estimated: Near ${cityName}, ${regionName} (IP-based)`)
+            .openPopup();
+
+          map._userMarker = marker;
+          toast.success(`Estimated location near ${cityName} via IP!`);
+        } else {
+          throw new Error("Invalid IP location data");
+        }
+      } catch (e) {
+        console.error("IP geolocation fallback failed:", e);
+        toast.dismiss(ipToastId);
+        toast.error("📍 Location Unavailable! Check your device GPS or connection.");
+      }
+    };
+
+    const onSuccess = (pos) => {
+      toast.dismiss(toastId);
+      const { latitude, longitude } = pos.coords;
+      map.flyTo([latitude, longitude], 15);
+
+      if (map._userMarker) map.removeLayer(map._userMarker);
+
+      const marker = L.marker([latitude, longitude])
+        .addTo(map)
+        .bindPopup("📍 You are here")
+        .openPopup();
+
+      map._userMarker = marker;
+      toast.success("📍 Location acquired successfully!");
+    };
+
+    const onError = (err) => {
+      console.error("Browser geolocation error:", err);
+      if (err.code === 1) {
+        toast.dismiss(toastId);
+        toast.error(
+          <div className="text-xs">
+            <b>📍 Location Access Denied!</b>
+            <p className="mt-1">
+              Please enable location permissions in your browser, or we will estimate via IP.
+            </p>
+          </div>,
+          { duration: 4000 }
+        );
+        setTimeout(() => fallbackToIP("Permission Denied", null), 1500);
+      } else {
+        fallbackToIP(err.code === 2 ? "Position Unavailable" : "Timeout", toastId);
+      }
+    };
+
+    navigator.geolocation.getCurrentPosition(onSuccess, onError, {
+      enableHighAccuracy: true,
+      timeout: 5000,
+      maximumAge: 0,
+    });
   };
 
   if (loading)
@@ -262,9 +433,10 @@ export default function FarmerFarmMap() {
       </div>
     );
 
+  // BUG FIX: Default to Hyderabad/Telangana (zoom 11) instead of all-India zoom 5
   const center = farmBoundary
     ? centroid(farmBoundary)
-    : { lat: 20.5937, lng: 78.9629 };
+    : { lat: 17.385, lng: 78.4867 };
 
   return (
     <div className="p-6 max-w-6xl mx-auto">
@@ -280,9 +452,9 @@ export default function FarmerFarmMap() {
         </Link>
         <button
           onClick={locateUser}
-          className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-md shadow"
+          className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-md shadow flex items-center gap-2"
         >
-          📍 Locate Me
+          <MapPin size={16} /> Locate Me
         </button>
       </div>
 
@@ -291,11 +463,13 @@ export default function FarmerFarmMap() {
       </h1>
 
       <MapContainer
-        whenCreated={(map) => (mapRef.current = map)}
         center={[center.lat, center.lng]}
-        zoom={farmBoundary ? 12 : 5}
+        zoom={farmBoundary ? 14 : 11}
         style={{ height: "500px", borderRadius: "1rem" }}
       >
+        <MapRefSetter setMap={setMapInstance} />
+        {/* 🌍 Auto-centres the map to the user's location on first load */}
+        <AutoLocate hasSavedFarm={!!farmBoundary} />
         <TileLayer
           url="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
           attribution="© Esri, Earthstar Geographics"

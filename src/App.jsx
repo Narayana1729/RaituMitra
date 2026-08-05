@@ -2,37 +2,48 @@ import React, { useEffect, useState } from "react";
 import { Routes, Route, useLocation, Link } from "react-router-dom";
 import { AnimatePresence, motion } from "framer-motion";
 
+import { signInWithEmailAndPassword } from "firebase/auth";
+import { auth } from "./firebase";
+
 // 🌿 Components
 import Header from "./components/Header";
+
 import Footer from "./components/Footer";
 import Home from "./components/Home";
-import CropRecommendation from "./components/CropRecommendation";
-import Weather from "./components/Weather";
-import PlantingCalendar from "./components/PlantingCalendar";
 import Resources from "./components/Resources";
-import MarketInsights from "./components/MarketInsights";
 import FertilizerCalculator from "./components/FertilizerCalculator";
 import PestAlerts from "./components/PestAlerts";
-import MarketUpdates from "./components/MarketUpdates";
 import FloatingHomeButton from "./components/FloatingHomeButton";
-import FarmersVoice from "./components/FarmersVoice";
+
+const CropRecommendation = React.lazy(() => import("./components/CropRecommendation"));
+const Weather = React.lazy(() => import("./components/Weather"));
+const PlantingCalendar = React.lazy(() => import("./components/PlantingCalendar"));
+const MarketInsights = React.lazy(() => import("./components/MarketInsights"));
+const MarketUpdates = React.lazy(() => import("./components/MarketUpdates"));
+const FarmersVoice = React.lazy(() => import("./components/FarmersVoice"));
 
 // 👩‍💼 Admin
-import AdminDashboard from "./components/AdminDashboard";
 import ProtectedRouteAdmin from "./components/ProtectedRouteAdmin";
 import AdminLogin from "./components/AdminLogin";
+const AdminDashboard = React.lazy(() => import("./components/AdminDashboard"));
 
 // 👨‍🌾 Farmer
 import FarmerLogin from "./components/FarmerLogin";
-import Profile from "./components/Profile";
 import ProtectedFarmerRoute from "./components/ProtectedFarmerRoute";
+const Profile = React.lazy(() => import("./components/Profile"));
 
 // 🌗 Context + Animations
 import { DarkModeProvider } from "./context/DarkModeContext";
 import PageTransition from "./components/PageTransition";
 
 // 🌱 NEW AI Detection Component
-import DiseaseDetect from "./components/DiseaseDetect";
+const DiseaseDetect = React.lazy(() => import("./components/DiseaseDetect"));
+const SatelliteMonitoring = React.lazy(() => import("./components/SatelliteMonitoring"));
+const FarmerFarmMap = React.lazy(() => import("./components/FarmerFarmMap"));
+const CommandAreaDashboard = React.lazy(() => import("./components/CommandAreaDashboard"));
+
+
+
 
 /* -----------------------------
    ⚡ Custom 404 Page
@@ -83,11 +94,37 @@ function NotFound() {
   );
 }
 
+const LoadingFallback = () => (
+  <div className="flex flex-col justify-center items-center min-h-[60vh] text-gray-500 dark:text-gray-400">
+    <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-emerald-500 mb-4"></div>
+    <p className="text-sm font-medium">Loading digital farm tools...</p>
+  </div>
+);
+
 /* -----------------------------
    🌾 Main App Component
 ------------------------------ */
 export default function App() {
   const location = useLocation();
+
+  // Auto-login as test farmer for bypassed testing access
+  // BUG FIX #9: Use env var for password — never hardcode credentials in source
+  useEffect(() => {
+    const autoLogin = async () => {
+      const testPass = import.meta.env.VITE_TEST_FARMER_PASS;
+      if (!testPass) return; // Skip auto-login if env var not set
+      if (!auth.currentUser) {
+        try {
+          await signInWithEmailAndPassword(auth, "testfarmer@raitumitra.com", testPass);
+          console.log("🤖 Bypassed Login: Authenticated as test farmer.");
+        } catch (err) {
+          console.error("🤖 Bypassed Login: Auto-login failed:", err);
+        }
+      }
+    };
+    autoLogin();
+  }, []);
+
 
   // Remove Google Translate artifacts
   useEffect(() => {
@@ -108,8 +145,8 @@ export default function App() {
     return () => clearInterval(interval);
   }, []);
 
-  // Hide header/footer for login routes
-  const noLayoutRoutes = ["/admin", "/farmer-login"];
+  // BUG FIX #11: /dashboard (admin) should also hide the farmer header/footer
+  const noLayoutRoutes = ["/admin", "/farmer-login", "/dashboard"];
   const showLayout = !noLayoutRoutes.includes(location.pathname);
 
   return (
@@ -119,86 +156,95 @@ export default function App() {
 
         <main className="flex-1">
           <AnimatePresence mode="wait">
-            <Routes location={location} key={location.pathname}>
+            <React.Suspense fallback={<LoadingFallback />}>
+              <Routes location={location} key={location.pathname}>
 
-              {/* 🏠 Home */}
-              <Route
-                path="/"
-                element={
-                  <PageTransition>
-                    <Home />
-                  </PageTransition>
-                }
-              />
-
-              {/* 🌱 NEW — AI Disease/Pest Detection */}
-              <Route
-                path="/detect"
-                element={
-                  <PageTransition>
-                    <DiseaseDetect />
-                  </PageTransition>
-                }
-              />
-
-              {/* 👨‍🌾 Farmers Feedback */}
-              <Route
-                path="/farmers"
-                element={
-                  <ProtectedFarmerRoute>
+                {/* 🏠 Home */}
+                <Route
+                  path="/"
+                  element={
                     <PageTransition>
-                      <FarmersVoice />
+                      <Home />
                     </PageTransition>
-                  </ProtectedFarmerRoute>
-                }
-              />
+                  }
+                />
 
-              {/* 👩‍💼 Admin */}
-              <Route path="/admin" element={<PageTransition><AdminLogin /></PageTransition>} />
-              <Route
-                path="/dashboard"
-                element={
-                  <ProtectedRouteAdmin>
+                {/* 🌱 NEW — AI Disease/Pest Detection */}
+                <Route
+                  path="/detect"
+                  element={
                     <PageTransition>
-                      <AdminDashboard />
+                      <DiseaseDetect />
                     </PageTransition>
-                  </ProtectedRouteAdmin>
-                }
-              />
+                  }
+                />
 
-              {/* 👨‍🌾 Farmer Auth + Profile */}
-              <Route path="/farmer-login" element={<PageTransition><FarmerLogin /></PageTransition>} />
-              <Route
-                path="/profile"
-                element={
-                  <ProtectedFarmerRoute>
-                    <PageTransition>
-                      <Profile />
-                    </PageTransition>
-                  </ProtectedFarmerRoute>
-                }
-              />
+                {/* 👨‍🌾 Farmers Feedback */}
+                <Route
+                  path="/farmers"
+                  element={
+                    <ProtectedFarmerRoute>
+                      <PageTransition>
+                        <FarmersVoice />
+                      </PageTransition>
+                    </ProtectedFarmerRoute>
+                  }
+                />
+
+                {/* 👩‍💼 Admin */}
+                <Route path="/admin" element={<PageTransition><AdminLogin /></PageTransition>} />
+                <Route
+                  path="/dashboard"
+                  element={
+                    <ProtectedRouteAdmin>
+                      <PageTransition>
+                        <AdminDashboard />
+                      </PageTransition>
+                    </ProtectedRouteAdmin>
+                  }
+                />
+
+                {/* 👨‍🌾 Farmer Auth + Profile */}
+                <Route path="/farmer-login" element={<PageTransition><FarmerLogin /></PageTransition>} />
+                <Route
+                  path="/profile"
+                  element={
+                    <ProtectedFarmerRoute>
+                      <PageTransition>
+                        <Profile />
+                      </PageTransition>
+                    </ProtectedFarmerRoute>
+                  }
+                />
 
 
-              {/* 🌿 Farmer Tools */}
-              <Route path="/crop" element={<PageTransition><CropRecommendation /></PageTransition>} />
-              <Route path="/weather" element={<PageTransition><Weather /></PageTransition>} />
-              <Route path="/calendar" element={<PageTransition><PlantingCalendar /></PageTransition>} />
-              <Route path="/resources" element={<PageTransition><Resources /></PageTransition>} />
-              <Route path="/market" element={<PageTransition><MarketInsights /></PageTransition>} />
-              <Route path="/fertilizer" element={<PageTransition><FertilizerCalculator /></PageTransition>} />
-              <Route path="/alerts" element={<PageTransition><PestAlerts /></PageTransition>} />
-              <Route path="/updates" element={<PageTransition><MarketUpdates /></PageTransition>} />
+                {/* 🌿 Farmer Tools */}
+                <Route path="/crop" element={<PageTransition><CropRecommendation /></PageTransition>} />
+                <Route path="/weather" element={<PageTransition><Weather /></PageTransition>} />
+                <Route path="/calendar" element={<PageTransition><PlantingCalendar /></PageTransition>} />
+                <Route path="/resources" element={<PageTransition><Resources /></PageTransition>} />
+                <Route path="/market" element={<PageTransition><MarketInsights /></PageTransition>} />
+                <Route path="/fertilizer" element={<PageTransition><FertilizerCalculator /></PageTransition>} />
+                <Route path="/alerts" element={<PageTransition><PestAlerts /></PageTransition>} />
+                <Route path="/updates" element={<PageTransition><MarketUpdates /></PageTransition>} />
+                <Route path="/satellite" element={<PageTransition><SatelliteMonitoring /></PageTransition>} />
+                <Route path="/map" element={<ProtectedFarmerRoute><PageTransition><FarmerFarmMap /></PageTransition></ProtectedFarmerRoute>} />
+                <Route path="/command-dashboard" element={<PageTransition><CommandAreaDashboard /></PageTransition>} />
 
-              {/* ❌ 404 */}
-              <Route path="*" element={<PageTransition><NotFound /></PageTransition>} />
 
-            </Routes>
+
+
+                {/* ❌ 404 */}
+                <Route path="*" element={<PageTransition><NotFound /></PageTransition>} />
+
+              </Routes>
+            </React.Suspense>
           </AnimatePresence>
         </main>
 
         {showLayout && <Footer />}
-        <FloatingHomeButton />
+        {/* BUG FIX #19: Hide floating button on map/satellite pages where it overlaps Leaflet controls */}
+        {!['/map', '/satellite', '/command-dashboard'].includes(location.pathname) && <FloatingHomeButton />}
       </div>
     </DarkModeProvider>
   );

@@ -4,7 +4,7 @@ export default function PageTransition({ children, type = "fade" }) {
   const variants = {
     fade: {
       initial: { opacity: 0 },
-      animate: { opacity: 10 },
+      animate: { opacity: 1 },
       exit: { opacity: 0 },
     },
     slideUp: {

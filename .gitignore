@@ -11,3 +11,7 @@ dist/
 # IDE and system files
 .vscode/
 .DS_Store
+
+# Large binaries and installers
+*.dmg
+*.zip

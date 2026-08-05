@@ -28,6 +28,20 @@ export default function Header() {
   const [searchLang, setSearchLang] = useState("");
   const [bannerActive, setBannerActive] = useState(false);
   const location = useLocation();
+  // BUG FIX #16: Ref for outside-click detection on language dropdown
+  const langDropdownRef = React.useRef(null);
+
+  // BUG FIX #16: Close language dropdown when clicking outside of it
+  React.useEffect(() => {
+    if (!showLang) return;
+    const handler = (e) => {
+      if (langDropdownRef.current && !langDropdownRef.current.contains(e.target)) {
+        setShowLang(false);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [showLang]);
 
   const navLinks = [
     { name: "Home", to: "/" },
@@ -38,7 +52,11 @@ export default function Header() {
     { name: "Market Insights", to: "/market" },
     { name: "Market Updates", to: "/updates" },
     { name: "Detect", to: "/detect" },
+    { name: "Satellite Map", to: "/satellite" },
+    { name: "Canal Command", to: "/command-dashboard" },
   ];
+
+
 
   const groupedLanguages = {
     English: [{ code: "en", label: "English" }],
@@ -168,7 +186,8 @@ export default function Header() {
           {/* 🌍 Controls */}
           <div className="flex items-center gap-3">
             {/* Language Dropdown */}
-            <div className="relative">
+            {/* BUG FIX #16: Attach ref for outside-click close */}
+            <div className="relative" ref={langDropdownRef}>
               <button
                 onClick={() => setShowLang((s) => !s)}
                 className={`p-2 rounded-full transition ${
