@@ -26,7 +26,7 @@ const CountUpText = ({ target, duration = 2, suffix = "", className = "" }) => {
 ------------------------------ */
 const DEFAULT_PARTICLE_COUNT = 30;
 const DEFAULT_SPOTLIGHT_RADIUS = 100;
-const DEFAULT_GLOW_COLOR = "132, 0, 255";
+const DEFAULT_GLOW_COLOR = "16, 185, 129";
 const MOBILE_BREAKPOINT = 768;
 
 /* 🌾 Raitu Mitra – Feature Grid */
@@ -382,14 +382,14 @@ const MagicBento = ({
       {/* Light/Dark Theme */}
       <style>{`
         :root {
-          --bento-bg: #f9f9fb;
-          --bento-text: #1a1025;
+          --bento-bg: #f9fdf9;
+          --bento-text: #0f2310;
         }
 
         @media (prefers-color-scheme: dark) {
           :root {
-            --bento-bg: #060010;
-            --bento-text: #f9f7ff;
+            --bento-bg: #040f06;
+            --bento-text: #f0fdf4;
           }
         }
 

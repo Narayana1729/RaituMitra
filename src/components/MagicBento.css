@@ -1,18 +1,18 @@
 :root {
-  /* 🎨 Brand & Theme Colors */
-  --emerald-fusion-1: #b832fa;
-  --emerald-fusion-2: #7a4bff;
-  --emerald-fusion-3: #ff7ae9;
+  /* 🌾 Brand & Theme Colors — RaituMitra Agricultural Green */
+  --emerald-fusion-1: #10b981;
+  --emerald-fusion-2: #059669;
+  --emerald-fusion-3: #34d399;
 
   --white: #ffffff;
-  --text-dark: #1a1025;
-  --text-light: #f5f3ff;
+  --text-dark: #0f2310;
+  --text-light: #f0fdf4;
 
-  --border-light: rgba(160, 106, 255, 0.3);
-  --border-dark: rgba(80, 50, 120, 0.7);
+  --border-light: rgba(16, 185, 129, 0.3);
+  --border-dark: rgba(5, 150, 105, 0.5);
 
   --card-light: rgba(255, 255, 255, 0.85);
-  --card-dark: linear-gradient(145deg, #0c001b, #190038);
+  --card-dark: linear-gradient(145deg, #051a0e, #0a2e1a);
 
   color-scheme: light dark;
 }
@@ -85,7 +85,7 @@
   color: var(--text-dark);
   overflow: hidden;
   transition: all 0.4s ease;
-  box-shadow: 0 10px 25px rgba(132, 0, 255, 0.15);
+  box-shadow: 0 10px 25px rgba(16, 185, 129, 0.12);
   backdrop-filter: blur(14px);
 }
 
@@ -94,13 +94,13 @@
     border: 1px solid var(--border-dark);
     background: var(--card-dark);
     color: var(--text-light);
-    box-shadow: 0 10px 30px rgba(132, 0, 255, 0.25);
+    box-shadow: 0 10px 30px rgba(16, 185, 129, 0.18);
   }
 }
 
 .card:hover {
   transform: translateY(-8px) scale(1.02);
-  box-shadow: 0 20px 50px rgba(132, 0, 255, 0.3);
+  box-shadow: 0 20px 50px rgba(16, 185, 129, 0.28);
 }
 
 /* ==============================
@@ -119,7 +119,7 @@
   display: inline-block;
   position: relative;
 
-  /* 💎 Infinite Shimmer Gradient */
+  /* 🌾 Farm Green Shimmer Gradient */
   background: linear-gradient(
     90deg,
     var(--emerald-fusion-1),
@@ -137,7 +137,6 @@
   animation: text-shine 6s linear infinite;
 }
 
-/* Infinite Gradient Sweep */
 /* Infinite Gradient Sweep */
 @keyframes text-shine {
   0% {
@@ -157,13 +156,13 @@
   display: inline-block;
   position: relative;
 
-  /* 💜 Smooth emerald–green Gradient */
+  /* 🌿 Agricultural Green Gradient */
   background: linear-gradient(
     90deg,
-    #b832fa,
-    #7a4bff,
-    #ff7ae9,
-    #b832fa
+    #10b981,
+    #059669,
+    #34d399,
+    #10b981
   );
   background-size: 300% 100%;
   background-position: 0% 50%;
@@ -188,13 +187,13 @@
 /* Add slight glow in dark mode */
 @media (prefers-color-scheme: dark) {
   .card__title {
-    text-shadow: 0 0 12px rgba(186, 104, 255, 0.3),
-                 0 0 20px rgba(132, 0, 255, 0.2);
+    text-shadow: 0 0 12px rgba(52, 211, 153, 0.3),
+                 0 0 20px rgba(16, 185, 129, 0.2);
   }
 }
 
 /* ==============================
-   🌈 Subtle Glow Border
+   🌿 Subtle Glow Border
    ============================== */
 .card--border-glow::after {
   content: '';
@@ -204,7 +203,7 @@
   padding: 2px;
   background: radial-gradient(
     circle at var(--glow-x, 50%) var(--glow-y, 50%),
-    rgba(255, 0, 255, 0.4),
+    rgba(16, 185, 129, 0.4),
     transparent 70%
   );
   pointer-events: none;
@@ -217,7 +216,7 @@
 }
 
 /* ==============================
-   🪄 Section Wrapper
+   🌾 Section Wrapper
    ============================== */
 .bento-section {
   position: relative;
@@ -226,8 +225,8 @@
   border-radius: 40px;
   background: linear-gradient(
     135deg,
-    rgba(255, 240, 255, 0.7),
-    rgba(245, 230, 255, 0.4)
+    rgba(240, 253, 244, 0.7),
+    rgba(209, 250, 229, 0.4)
   );
 }
 
@@ -235,7 +234,7 @@
   .bento-section {
     background: radial-gradient(
       circle at 50% 50%,
-      rgba(132, 0, 255, 0.08),
+      rgba(16, 185, 129, 0.06),
       transparent 70%
     );
   }

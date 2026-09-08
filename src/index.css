@@ -152,7 +152,7 @@ body {
     @apply bg-white/40 dark:bg-gray-800/40 backdrop-blur-md border border-white/30 dark:border-gray-700/50;
   }
   .shadow-emerald-glow {
-    box-shadow: 0 0 40px -10px rgba(139, 92, 246, 0.7);
+    box-shadow: 0 0 40px -10px rgba(16, 185, 129, 0.6);
   }
 }
 
@@ -190,22 +190,22 @@ html {
   color: white;
 }
 
-/* 🌌 Custom background gradient for hero */
+/* 🌱 Custom background gradient for hero */
 .bg-reactbits {
-  background: radial-gradient(circle at 50% 0%, rgba(139, 92, 246, 0.25), transparent 60%),
-    linear-gradient(135deg, #1a1325, #0b0b0f 60%);
+  background: radial-gradient(circle at 50% 0%, rgba(16, 185, 129, 0.18), transparent 60%),
+    linear-gradient(135deg, #071a0e, #0b0b0f 60%);
 }
 
 /* ⚡ Aurora-like floating glow */
 .aurora {
-  background: radial-gradient(600px circle at 50% 0%, rgba(139, 92, 246, 0.15), transparent 70%);
+  background: radial-gradient(600px circle at 50% 0%, rgba(16, 185, 129, 0.12), transparent 70%);
   filter: blur(120px);
   opacity: 0.4;
 }
 
-/* 💜 Text gradient helper */
+/* 🌿 Text gradient helper */
 .text-gradient {
-  background: linear-gradient(to right, #c084fc, #a78bfa, #818cf8);
+  background: linear-gradient(to right, #10b981, #34d399, #6ee7b7);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
 }
