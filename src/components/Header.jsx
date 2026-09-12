@@ -78,21 +78,35 @@ export default function Header() {
   };
 
   useEffect(() => {
+    let initialized = false;
+
     window.googleTranslateElementInit = () => {
-      new window.google.translate.TranslateElement(
-        { pageLanguage: "en" },
-        "google_translate_element"
-      );
+      const TranslateElement = window.google?.translate?.TranslateElement;
+      if (initialized || typeof TranslateElement !== "function") return;
+
+      const options = { pageLanguage: "en" };
+      const target = "google_translate_element";
+
+      try {
+        new TranslateElement(options, target);
+      } catch (error) {
+        // Some preview/runtime shims expose TranslateElement as a callable function.
+        TranslateElement(options, target);
+      }
+      initialized = true;
     };
+
     loadGoogleTranslate().then(() => {
-      if (window.google && window.google.translate) {
-        window.googleTranslateElementInit();
-        const savedLang = getCookie("googtrans")?.split("/").pop();
-        if (savedLang && savedLang !== "en") {
-          setTimeout(() => handleTranslate(savedLang), 600);
-        }
+      window.googleTranslateElementInit();
+      const savedLang = getCookie("googtrans")?.split("/").pop();
+      if (savedLang && savedLang !== "en") {
+        setTimeout(() => handleTranslate(savedLang), 600);
       }
     });
+
+    return () => {
+      delete window.googleTranslateElementInit;
+    };
   }, []);
 
   useEffect(() => {
