@@ -76,51 +76,7 @@ export default defineConfig({
   ],
 
   build: {
-    rollupOptions: {
-      output: {
-        manualChunks(id) {
-          if (id.includes("node_modules")) {
-            if (id.includes("leaflet")) {
-              return "vendor-leaflet";
-            }
-            if (id.includes("recharts") || id.includes("d3") || id.includes("resize-detector")) {
-              return "vendor-charts";
-            }
-            if (id.includes("framer-motion") || id.includes("motion") || id.includes("gsap") || id.includes("aos")) {
-              return "vendor-motion";
-            }
-            if (id.includes("firebase")) {
-              return "vendor-firebase";
-            }
-            if (id.includes("lucide-react") || id.includes("react-feather")) {
-              return "vendor-icons";
-            }
-            if (id.includes("onnxruntime-web")) {
-              return "vendor-onnx";
-            }
-            if (id.includes("jspdf") || id.includes("html2canvas") || id.includes("file-saver")) {
-              return "vendor-pdf";
-            }
-            if (id.includes("turf")) {
-              return "vendor-turf";
-            }
-            if (id.includes("tsparticles") || id.includes("react-particles")) {
-              return "vendor-particles";
-            }
-            if (id.includes("react") || id.includes("react-dom") || id.includes("react-router-dom")) {
-              return "vendor-react";
-            }
-            if (id.includes("radix-ui")) {
-              return "vendor-radix";
-            }
-            if (id.includes("i18next")) {
-              return "vendor-i18n";
-            }
-            return "vendor-libs";
-          }
-        }
-      }
-    }
+    chunkSizeWarningLimit: 2000,
   },
   resolve: {
     alias: {
