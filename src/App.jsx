@@ -4,6 +4,7 @@ import { AnimatePresence, motion } from "framer-motion";
 
 import { signInWithEmailAndPassword } from "firebase/auth";
 import { auth } from "./firebase";
+import { SpeedInsights } from "@vercel/speed-insights/react";
 
 // 🌿 Components
 import Header from "./components/Header";
@@ -245,6 +246,7 @@ export default function App() {
         {showLayout && <Footer />}
         {/* BUG FIX #19: Hide floating button on map/satellite pages where it overlaps Leaflet controls */}
         {!['/map', '/satellite', '/command-dashboard'].includes(location.pathname) && <FloatingHomeButton />}
+        <SpeedInsights />
       </div>
     </DarkModeProvider>
   );
