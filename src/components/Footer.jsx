@@ -62,16 +62,14 @@ export default function Footer() {
           >
             Features
             <ChevronDown
-              className={`w-4 h-4 transition-transform duration-300 ${
-                openSection === "features" ? "rotate-180" : ""
-              }`}
+              className={`w-4 h-4 transition-transform duration-300 ${openSection === "features" ? "rotate-180" : ""
+                }`}
             />
           </button>
 
           <ul
-            className={`space-y-2 text-sm overflow-hidden transition-all duration-500 ${
-              openSection === "features" ? "max-h-[500px] opacity-100" : "max-h-0 opacity-0"
-            }`}
+            className={`space-y-2 text-sm overflow-hidden transition-all duration-500 ${openSection === "features" ? "max-h-[500px] opacity-100" : "max-h-0 opacity-0"
+              }`}
           >
             {features.map(({ to, icon: Icon, label }) => (
               <li key={to}>
@@ -102,7 +100,7 @@ export default function Footer() {
             </li>
             <li>
               <a
-                href="https://github.com/Sriman1729/RaituMitra"
+                href="https://github.com/Narayana1729/RaituMitra"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="inline-flex items-center gap-2 hover:text-emerald-600 dark:hover:text-emerald-300 transition"
