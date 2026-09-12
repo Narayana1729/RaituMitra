@@ -73,8 +73,6 @@
     "vite": "^7.1.5",
     "vite-plugin-pwa": "^1.2.0"
   },
-  "description": "",
-  "main": "index.js",
   "keywords": [],
   "author": "",
   "license": "ISC"
